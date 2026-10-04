@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echo Chambers Dynamics | Sasahara et al. (2021)</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@300;500&display=swap" rel="stylesheet">
+
+    <script>
+        window.MathJax = {
+            loader: { load: ['[tex]/ams'] },
+            tex: {
+                packages: {'[+]': ['ams']},
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']]
+            },
+            svg: { fontCache: 'global', scale: 1.1 }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+    <style>
+        :root {
+            /* PALETTE */
+            --bg-deep: #080810;
+            --bg-gradient: radial-gradient(circle at 50% 50%, #110c12 0%, #050508 100%);
+            
+            --text-main: #ffffff;
+            --text-muted: #a0a0b0;
+            
+            --vir-1: #9b5de5; /* Purple */
+            --vir-2: #3b528b; /* Blue */
+            --vir-3: #00f5d4; /* Teal */
+            --vir-4: #70e000; /* Green */
+            --vir-5: #fee440; /* Yellow */
+
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            --glass-blur: 25px;
+
+            --font-head: 'Playfair Display', serif;
+            --font-body: 'Outfit', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg-gradient);
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            overflow: hidden;
+            width: 100vw; height: 100vh;
+        }
+
+        /* --- BACKGROUND FX --- */
+        #network-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1; opacity: 0.7;
+        }
+        .noise {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='7' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none; z-index: -1;
+        }
+
+        /* --- TYPOGRAPHY --- */
+        h1, h2 { font-family: var(--font-head); font-weight: 600; letter-spacing: -0.01em; }
+        
+        h1 { 
+            font-size: 3.5rem; line-height: 1.1; margin-bottom: 1.5rem; 
+            background: linear-gradient(90deg, var(--vir-3), var(--vir-4), var(--vir-5));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(0, 245, 212, 0.2);
+        }
+        
+        h2 { font-size: 2.5rem; margin-bottom: 1.5rem; color: #fff; text-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        
+        h3 { 
+            font-family: var(--font-code); font-size: 0.85rem; 
+            text-transform: uppercase; letter-spacing: 0.15em; 
+            margin-bottom: 0.8rem; color: var(--text-muted); opacity: 0.8;
+        }
+
+        p {
+            font-size: 1.2rem; line-height: 1.6; color: var(--text-muted);
+            font-weight: 300; margin-bottom: 1.5rem;
+        }
+
+        /* --- KICKER POSITIONING --- */
+        .slide-kicker {
+            position: absolute;
+            top: 4rem; 
+            left: 6vw;
+            font-family: var(--font-code); font-size: 0.75rem; 
+            color: var(--vir-4); border: 1px solid rgba(112, 224, 0, 0.4);
+            padding: 6px 12px; border-radius: 20px;
+            background: rgba(112, 224, 0, 0.05);
+            box-shadow: 0 0 15px rgba(112, 224, 0, 0.1);
+            z-index: 10;
+        }
+
+        /* --- LAYOUT --- */
+        .slider-wrapper { height: 100vh; transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+        .slide {
+            height: 100vh; width: 100vw;
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 6vw; opacity: 0; pointer-events: none;
+            transition: opacity 0.5s ease 0.2s;
+        }
+        .slide.active { opacity: 1; pointer-events: all; }
+
+        .layout-split {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4rem;
+            width: 100%; max-width: 1600px; align-items: center;
+            margin-top: 3rem;
+        }
+        
+        .layout-center {
+            text-align: center; max-width: 1100px; margin: 0 auto;
+            display: flex; flex-direction: column; align-items: center;
+            margin-top: 3rem;
+        }
+
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; width: 100%; margin-top: 2rem; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; width: 100%; margin-top: 2rem; }
+        .grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1.5rem; width: 100%; margin-top: 1rem; }
+
+        /* --- BOXES --- */
+        .glass-box {
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
+            border-top: 1px solid rgba(255,255,255,0.3);
+            padding: 1.8rem; border-radius: 20px;
+            box-shadow: var(--glass-shadow);
+            transition: transform 0.4s ease;
+            text-align: left;
+        }
+        .glass-box:hover { transform: translateY(-5px); border-color: rgba(255,255,255,0.3); }
+
+        .box-glow-teal { box-shadow: 0 0 20px rgba(0, 245, 212, 0.1); border-color: rgba(0, 245, 212, 0.3); }
+        .box-glow-green { box-shadow: 0 0 20px rgba(112, 224, 0, 0.1); border-color: rgba(112, 224, 0, 0.3); }
+        .box-glow-yellow { box-shadow: 0 0 20px rgba(254, 228, 64, 0.1); border-color: rgba(254, 228, 64, 0.3); }
+        .box-glow-purple { box-shadow: 0 0 20px rgba(155, 93, 229, 0.1); border-color: rgba(155, 93, 229, 0.3); }
+
+        .math-glass {
+            font-family: var(--font-head);
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 1.5rem; border-radius: 12px;
+            text-align: center; font-size: 1.4rem; margin: 1.5rem 0;
+            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+        }
+
+        /* --- VISUALS --- */
+        .img-frame {
+            display: inline-block; padding: 6px; border-radius: 12px;
+            background: rgba(255,255,255,0.05); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 0 25px rgba(0,0,0,0.5);
+            max-width: 100%; transition: all 0.3s ease;
+        }
+        .img-frame img { display: block; border-radius: 8px; max-width: 100%; max-height: 55vh; }
+        
+        .img-halo-teal { border-color: rgba(0, 245, 212, 0.4); box-shadow: 0 0 40px rgba(0, 245, 212, 0.15); }
+        .img-halo-purple { border-color: rgba(155, 93, 229, 0.4); box-shadow: 0 0 40px rgba(155, 93, 229, 0.15); }
+        .img-halo-yellow { border-color: rgba(254, 228, 64, 0.4); box-shadow: 0 0 40px rgba(254, 228, 64, 0.15); }
+
+        .caption {
+            font-family: var(--font-code); font-size: 0.75rem; 
+            color: var(--text-muted); margin-top: 1rem; letter-spacing: 1.5px;
+            text-transform: uppercase; opacity: 0.8; text-align: center;
+        }
+
+        /* --- ANIMATIONS --- */
+        .reveal { opacity: 0; transform: translateY(20px); transition: all 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .slide.active .reveal { opacity: 1; transform: translateY(0); }
+        .delay-1 { transition-delay: 0.1s; }
+        .delay-2 { transition-delay: 0.2s; }
+        .delay-3 { transition-delay: 0.3s; }
+
+       
+        .slide-num { position: fixed; bottom: 2rem; right: 3rem; font-family: var(--font-code); color: var(--text-muted); font-size: 1rem; opacity: 0.3; }
+
+        /* Halo Text */
+        .halo-teal { color: var(--vir-3); text-shadow: 0 0 15px rgba(0, 245, 212, 0.4); }
+        .halo-green { color: var(--vir-4); text-shadow: 0 0 15px rgba(112, 224, 0, 0.4); }
+        .halo-yellow { color: var(--vir-5); text-shadow: 0 0 15px rgba(254, 228, 64, 0.4); }
+        .halo-purple { color: var(--vir-1); text-shadow: 0 0 15px rgba(155, 93, 229, 0.4); }
+
+        /* --- FEED VISUALIZATION STYLES --- */
+        .feed-wrapper {
+            position: relative;
+            width: 320px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        .feed-header, .feed-footer {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            margin-top: 0.5rem;
+            opacity: 0.8;
+        }
+
+        .feed-container {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .feed-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+
+        /* --- CONCORDANT STYLE (Active/Neon) --- */
+        .feed-item.concordant {
+            background: rgba(0, 245, 212, 0.05);
+            border-color: rgba(0, 245, 212, 0.2);
+            box-shadow: 0 0 10px rgba(0, 245, 212, 0.05);
+        }
+        .feed-item.concordant .line.glow-text {
+            background: var(--vir-3);
+            box-shadow: 0 0 8px var(--vir-3);
+        }
+        .feed-item.concordant .status-icon {
+            color: var(--vir-3);
+            text-shadow: 0 0 5px var(--vir-3);
+        }
+        .avatar.glow-teal {
+            background: var(--vir-3);
+            box-shadow: 0 0 10px var(--vir-3);
+        }
+
+        /* --- DISCORDANT STYLE (Muted/Dark) --- */
+        .feed-item.discordant {
+            background: rgba(0, 0, 0, 0.3);
+            opacity: 0.5;
+            border-color: rgba(255, 255, 255, 0.05);
+        }
+        .feed-item.discordant .line {
+            background: #444;
+        }
+        .feed-item.discordant .status-icon {
+            color: #555;
+        }
+        .feed-item.faded {
+            opacity: 0.2;
+            transform: scale(0.95);
+        }
+
+        /* --- ITEM ELEMENTS --- */
+        .avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #444;
+            flex-shrink: 0;
+        }
+
+        .content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .line {
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .w-90 { width: 90%; }
+        .w-80 { width: 80%; }
+        .w-70 { width: 70%; }
+        .w-60 { width: 60%; }
+        .w-50 { width: 50%; }
+        .w-40 { width: 40%; }
+        .w-30 { width: 30%; }
+
+        .status-icon {
+            font-family: var(--font-code);
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        /* --- DECISION TREE VISUALIZATION --- */
+        .decision-tree {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            font-family: var(--font-code);
+        }
+
+        .user-badge {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #fff;
+            box-shadow: 0 0 15px rgba(255,255,255,0.05);
+        }
+
+        .vertical-line {
+            width: 2px;
+            height: 25px;
+            background: rgba(255,255,255,0.2);
+            margin: 0 auto;
+        }
+
+        .branching-container {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            width: 100%;
+            position: relative;
+        }
+
+        .branch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            flex: 1;
+        }
+
+        .connector-elbow-left, .connector-elbow-right {
+            height: 20px;
+            width: 50%;
+            border-top: 2px solid rgba(255,255,255,0.2);
+            position: absolute;
+            top: 0;
+        }
+        .connector-elbow-left {
+            right: 0;
+            border-left: 2px solid rgba(255,255,255,0.2);
+            border-top-left-radius: 15px;
+        }
+        .connector-elbow-right {
+            left: 0;
+            border-right: 2px solid rgba(255,255,255,0.2);
+            border-top-right-radius: 15px;
+        }
+
+        .prob-tag {
+            margin-top: 10px;
+            margin-bottom: 10px;
+            font-size: 0.85rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: var(--bg-deep);
+            border: 1px solid;
+            position: relative;
+            z-index: 2;
+        }
+        .prob-tag.yellow { color: var(--vir-5); border-color: var(--vir-5); box-shadow: 0 0 10px rgba(254, 228, 64, 0.2); }
+        .prob-tag.teal { color: var(--vir-3); border-color: var(--vir-3); box-shadow: 0 0 10px rgba(0, 245, 212, 0.2); }
+
+        .action-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 1.2rem;
+            width: 160px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 0.5rem;
+            transition: transform 0.3s;
+        }
+        .action-card:hover { transform: translateY(-5px); }
+
+        .glow-yellow { 
+            border-color: rgba(254, 228, 64, 0.3); 
+            box-shadow: inset 0 0 20px rgba(254, 228, 64, 0.05);
+        }
+        .glow-teal { 
+            border-color: rgba(0, 245, 212, 0.3); 
+            box-shadow: inset 0 0 20px rgba(0, 245, 212, 0.05);
+        }
+
+        .card-icon { font-size: 1.8rem; line-height: 1; }
+        .glow-yellow .card-icon { color: var(--vir-5); text-shadow: 0 0 10px var(--vir-5); }
+        .glow-teal .card-icon { color: var(--vir-3); text-shadow: 0 0 10px var(--vir-3); }
+
+        .card-content strong { display: block; font-size: 1rem; color: #fff; margin-bottom: 2px; }
+        .card-content span { display: block; font-size: 0.7rem; color: var(--text-muted); }
+
+        .line-down {
+            width: 2px;
+            height: 30px;
+            margin-top: 5px;
+        }
+        .yellow-line { background: linear-gradient(to bottom, var(--vir-5), rgba(255,255,255,0.2)); }
+        .teal-line { background: linear-gradient(to bottom, var(--vir-3), rgba(255,255,255,0.2)); }
+
+        .node-end {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            position: relative;
+            margin-top: -5px;
+        }
+
+        .merge-point {
+            width: 80%;
+            height: 15px;
+            border-bottom: 2px solid rgba(255,255,255,0.2);
+            border-left: 2px solid rgba(255,255,255,0.2);
+            border-right: 2px solid rgba(255,255,255,0.2);
+            border-bottom-left-radius: 15px;
+            border-bottom-right-radius: 15px;
+            margin-bottom: 10px;
+        }
+
+        .output-box {
+            background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.0) 100%);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 10px 30px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="network-canvas"></canvas>
+    <div class="noise"></div>
+
+    <div class="nav-dots" id="dotsContainer"></div>
+    <div class="slide-num"><span id="currSlide" style="color:var(--text-main)">01</span> / <span id="totalSlides">17</span></div>
+
+    <div class="slider-wrapper" id="slider">
+
+        <section class="slide active">
+            <div class="slide-kicker reveal">J. COMPUT. SOC. SCI (2021) | SASAHARA ET AL.</div>
+            <div class="layout-center">
+                <h1 class="reveal delay-1" style="margin-bottom: 1rem;">Social Influence & Unfollowing Accelerate <br>the Emergence of Echo Chambers</h1>
+                <p class="reveal delay-2" style="margin-top: 1rem; font-size: 1.3rem;">
+                    An Agent-Based model of the co-evolution of opinion <br> <span class="halo-green">Polarization</span> and topological <span class="halo-yellow">Segregation</span>.
+                </p>
+                <div class="reveal delay-3" style="margin-top: 1rem; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <span style="font-family: var(--font-code); font-size: 1rem; color: var(--vir-4);">ELISABETTA AGNELLO | Physics of Complex Systems </span>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">01 // THE PHENOMENON</div>
+            <div class="layout-split">
+                <div class="reveal">
+                    <h2>The Connectivity Paradox</h2>
+                    <p>Despite their potential for global connection, social media are empirically observed to favour segregated structures, leading to the formation of <span class="halo-yellow">Echo Chambers</span></p>
+                    
+                    <div class="glass-box box-glow-purple" style="margin-bottom: 1.5rem;">
+                        <strong class="halo-purple" style="font-size: 1.3rem; display:block; margin-bottom:0.5rem;">Topological Segregation</strong>
+                        <p style="margin:0; font-size: 1.2rem;">Physical fragmentation of the graph into disconnected clusters.</p>
+                    </div>
+                    
+                    <div class="glass-box box-glow-green">
+                        <strong class="halo-green" style="font-size: 1.3rem; display:block; margin-bottom:0.5rem;">Opinion Polarization</strong>
+                        <p style="margin:0; font-size: 1.2rem;">High intra-cluster homogeneity and maximal inter-cluster ideological distance.</p>
+                    </div>
+                </div>
+                <div class="reveal delay-2 viz-center">
+                    <div class="img-frame img-halo-purple" style="width: 100%; aspect-ratio: 16/9; display:flex; align-items:center; justify-content:center; background: #000;">
+                        <img src="movie_hd_network_evolution.gif" alt="Network Evolution GIF" style="width:100%; height:auto;">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">02 // THE MODEL</div>
+            <div class="layout-center">
+                <h2 class="reveal delay-1">The Model</h2>
+                <div class="reveal delay-2 glass-box box-glow-purple" style="width: 100%; margin-bottom: 3rem; text-align: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 1.5rem; flex-wrap: wrap;">
+                        <div style="text-align: center;">
+                            <div style="font-family: var(--font-code); color: var(--vir-3); font-size: 1.2rem;">SOCIAL INFLUENCE</div>
+                        </div>
+                        <div style="font-size: 2rem; color: #fff;">&times;</div> 
+                        <div style="text-align: center;">
+                            <div style="font-family: var(--font-code); color: var(--vir-5); font-size: 1.2rem;">UNFOLLOWING</div>
+                        </div>
+                        <div style="font-size: 2rem; color: #fff;">&rarr;</div>
+                        <div style="padding: 10px 20px; border: 1px solid var(--vir-4); border-radius: 50px; background: rgba(112, 224, 0, 0.1); color: var(--vir-4); font-weight: 600;">
+                            AGGREGATED AND POLARIZED STATE
+                        </div>
+                    </div>
+                </div>
+
+                <div class="reveal delay-3 grid-2" style="width: 100%; gap: 2rem;">
+                    <div class="glass-box" style="padding: 1.5rem; display: flex; flex-direction: column; justify-content: center;">
+                        <h3 style="color: #fff; margin-bottom: 0.5rem;">Random Directed Graph</h3>
+                        <div class="math-glass" style="margin: 0.5rem 0; padding: 1rem; font-size: 1.2rem;">
+                            $$ G = (V, E) $$
+                        </div>
+                    </div>
+
+                    <div class="glass-box" style="padding: 1.5rem;">
+                        <h3 style="color: #fff; margin-bottom: 0.5rem;">Initialization</h3>
+                        <ul style="list-style: none; padding: 0; margin: 0;">
+                            <li style="margin-bottom: 1rem; padding-left: 1rem; border-left: 2px solid var(--vir-3);">
+                                <br><span style="font-size: 1.2rem; color: var(--text-muted);">Initial topology with no predefined clusters or structural homophily.</span>
+                            </li>
+                            <li style="padding-left: 1rem; border-left: 2px solid var(--vir-5);">
+                                <br><span style="font-size: 1.2rem; color: var(--text-muted);">Uniform distribution $U(-1, 1)$ with no initial bias.</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">03 // AGENT</div>
+            <div class="layout-split">
+                <div class="reveal">
+                    <h2>Agent & Screen</h2>
+                    <p>
+                        Each agent $i$ holds a continuous opinion $o_i(t) \in [-1,+1]$ and a <strong class="halo-green">Screen</strong> $S_i(t)$, modelled as a FIFO queue of length $L$. <br>
+                        Unlike <em>mean-field</em> models, attention is limited.
+                    </p>
+                    <ul style="list-style: none; padding-left: 0;">
+                        <li style="margin-bottom: 2rem; padding-left: 1.5rem; border-left: 3px solid var(--vir-3);font-size: 1.2rem;">
+                            <strong class="halo-teal" style="display:block; margin-bottom:0.3rem;">Cognitive Filter (Screen)</strong>
+                            The agent only sees the last $L$ messages. Interaction is asynchronous and delayed.
+                        </li>
+                        <li style="margin-bottom: 2rem; padding-left: 1.5rem; border-left: 3px solid var(--vir-5);font-size: 1.2rem;">
+                            <strong class="halo-yellow" style="display:block; margin-bottom:0.3rem;">Bounded Confidence ($\epsilon$)</strong>
+                            Influence occurs only when cognitive dissonance is low: $|o_i - m| < \epsilon$.
+                        </li>
+                    </ul>
+                </div>
+                <div class="reveal delay-2 viz-center" style="width: 100%;">
+                    <div class="feed-wrapper">
+                        <div class="feed-header">
+                            <span style="font-family: var(--font-code); font-size: 0.8rem; color: var(--vir-3);">INCOMING ($t$)</span>
+                            <div style="height: 1px; flex-grow: 1; background: linear-gradient(90deg, var(--vir-3), transparent); margin-left: 10px;"></div>
+                        </div>
+
+                        <div class="feed-container">
+                            <div class="feed-item concordant">
+                                <div class="avatar glow-teal"></div>
+                                <div class="content">
+                                    <div class="line w-80 glow-text"></div>
+                                    <div class="line w-60"></div>
+                                </div>
+                                <div class="status-icon">✓</div>
+                            </div>
+                            <div class="feed-item discordant">
+                                <div class="avatar"></div>
+                                <div class="content">
+                                    <div class="line w-70"></div>
+                                    <div class="line w-40"></div>
+                                </div>
+                                <div class="status-icon">×</div>
+                            </div>
+                            <div class="feed-item concordant">
+                                <div class="avatar glow-teal"></div>
+                                <div class="content">
+                                    <div class="line w-90 glow-text"></div>
+                                    <div class="line w-50"></div>
+                                </div>
+                                <div class="status-icon">✓</div>
+                            </div>
+                            <div class="feed-item concordant">
+                                <div class="avatar glow-teal"></div>
+                                <div class="content">
+                                    <div class="line w-60 glow-text"></div>
+                                    <div class="line w-30"></div>
+                                </div>
+                                <div class="status-icon">✓</div>
+                            </div>
+                            <div class="feed-item discordant faded">
+                                <div class="avatar"></div>
+                                <div class="content">
+                                    <div class="line w-80"></div>
+                                </div>
+                                <div class="status-icon">×</div>
+                            </div>
+                        </div>
+
+                        <div class="feed-footer">
+                            <div style="height: 1px; flex-grow: 1; background: linear-gradient(90deg, transparent, var(--text-muted)); margin-right: 10px;"></div>
+                            <span style="font-family: var(--font-code); font-size: 0.8rem; color: var(--text-muted);">DROPPING OUT ($t-L$)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">04 // DYNAMICS</div>
+            <div class="layout-center">
+                <h2 class="reveal">Opinion Dynamics</h2>
+                
+                <div class="math-glass reveal delay-1">
+                    $$ o_i(t+1) = o_i(t) + \mu \cdot \frac{\sum_{m \in S_i} \mathbb{I}(|o_i - m| < \epsilon) \cdot (m - o_i)}{\sum_{m \in S_i} \mathbb{I}(|o_i - m| < \epsilon)} $$
+                </div>
+
+                <div class="grid-3 reveal delay-2" style="text-align: left;">
+                    <div class="glass-box box-glow-teal">
+                        <h3 style="color: var(--vir-3);font-size: 1.3rem;">$\mu$ Permeability</h3>
+                        <p style="font-size: 1.2rem;">Strength of social influence. Controls the speed of convergence.</p>
+                    </div>
+                    <div class="glass-box box-glow-yellow">
+                        <h3 style="color: var(--vir-5);font-size: 1.3rem;">$\epsilon$ Tolerance</h3>
+                        <p style="font-size: 1.2rem;">Confidence threshold. Defines the agent's open-mindedness.</p>
+                    </div>
+                    <div class="glass-box">
+                        <h3 style="color: #fff;font-size: 1.3rem;">$\mathbb{I}(\cdot)$ Indicator</h3>
+                        <p style="font-size: 1.2rem;">Heaviside filter: interaction happens only between compatible opinions.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">05 // POSTING</div>
+            <div class="layout-split">
+                <div class="reveal">
+                    <h2>Posting Process</h2>
+                    <p>Besides changing its opinion, the agent modifies the network and spreads information.</p>
+                    
+                    <div class="glass-box box-glow-yellow" style="margin-bottom: 1.5rem;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <h3 style="margin:0; color: #fff;">Repost: Prob $p$</h3>
+                            <span class="halo-yellow">ECHO</span>
+                        </div>
+                        <p style="margin-top:0.5rem; font-size: 1.2rem;">The agent picks a concordant message from its screen and reposts it. This mechanism mimics virality.</p>
+                    </div>
+
+                    <div class="glass-box box-glow-teal">
+                        <div style="display: flex; justify-content: space-between;">
+                            <h3 style="margin:0; color: #fff;">New Post: Prob $1-p$</h3>
+                            <span class="halo-teal">NOVELTY</span>
+                        </div>
+                        <p style="margin-top:0.5rem; font-size: 1.2rem;">The agent creates new content based on its current opinion $o_i(t)$ (Innovation).</p>
+                    </div>
+                </div>
+                <div class="reveal delay-2 viz-center" style="width: 100%;">
+                    <div class="decision-tree">
+                        <div class="node-start">
+                            <div class="user-badge">User $i$ Action</div>
+                            <div class="vertical-line"></div>
+                        </div>
+
+                        <div class="branching-container">
+                            <div class="branch left">
+                                <div class="connector-elbow-left"></div>
+                                <div class="prob-tag yellow">$p$</div>
+                                <div class="action-card glow-yellow">
+                                    <div class="card-icon">↻</div>
+                                    <div class="card-content">
+                                        <strong>REPOST</strong>
+                                        <span>Copy Concordant</span>
+                                    </div>
+                                </div>
+                                <div class="line-down yellow-line"></div>
+                            </div>
+                            <div class="branch right">
+                                <div class="connector-elbow-right"></div>
+                                <div class="prob-tag teal">$1-p$</div>
+                                <div class="action-card glow-teal">
+                                    <div class="card-icon">+</div>
+                                    <div class="card-content">
+                                        <strong>NEW POST</strong>
+                                        <span>Express $o_i(t)$</span>
+                                    </div>
+                                </div>
+                                <div class="line-down teal-line"></div>
+                            </div>
+                        </div>
+
+                        <div class="node-end">
+                            <div class="merge-point"></div>
+                            <div class="output-box">
+                                <span style="letter-spacing: 2px;">BROADCAST</span>
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">PUSH TO FOLLOWERS' FEED</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">06 // REWIRING</div>
+            <div class="layout-split">
+                <div class="reveal">
+                    <h2>Rewiring Process</h2>
+                    <p>With probability <span class="halo-yellow">$q$</span>, the agent reacts to the cognitive dissonance generated by discordant messages.</p>
+                    
+                    <div class="glass-box box-glow-green" style="margin-top: 2rem;">
+                        <h3 style="color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem;">Rewiring Procedure</h3>
+                        <ol style="color: var(--text-muted); margin-left: 1.5rem; line-height: 2; font-family: var(--font-code); font-size: 1rem;">
+                            <li>Identify author $j$ : $|o_i - m_j| \ge \epsilon$</li>
+                            <li><span style="color: #ff6b6b">Unfollow</span> $i \to j$</li>
+                            <li><span style="color: var(--vir-4)">New Follow</span> $i \to k$ (Rewiring)</li>
+                        </ol>
+                    </div>
+                </div>
+                
+                <div class="reveal delay-2">
+                    <h3 style="color: var(--vir-3); margin-bottom: 1rem;">Rewiring Strategies</h3>
+                    <div style="display: grid; gap: 1rem;">
+                        <div class="glass-box box-glow-green" style="padding: 1.5rem;">
+                            <strong class="halo-green">Random</strong>: Uniform choice among non-friends.
+                        </div>
+                        <div class="glass-box box-glow-yellow" style="padding: 1.5rem;">
+                            <strong class="halo-yellow">Repost</strong>: Choice among the original authors of the messages reposted in the Screen.
+                        </div>
+                        <div class="glass-box box-glow-purple" style="padding: 1.5rem;">
+                            <strong class="halo-purple">Recommendation</strong>: Choice among users with similar opinions.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">07 // RESULTS</div>
+            <div class="layout-split">
+                <div class="reveal">
+                    <h2>Echo Chamber Formation</h2>
+                    <p>Standard simulation: $N=100, \epsilon=0.4$ <br>Three stages of symmetry breaking:</p>
+                    <ul style="list-style: none; margin-top: 2rem;">
+                        <li style="margin-bottom: 1.5rem;">
+                            <strong class="halo-teal">Entropy Drop</strong>
+                            <br><span style="font-size:1.2rem">Collapse of information diversity in the Screen.</span>
+                        </li>
+                        <li style="margin-bottom: 1.5rem;">
+                            <strong class="halo-yellow">Polarization</strong>
+                            <br><span style="font-size:1.2rem">Separation into stable ideological bands.</span>
+                        </li>
+                        <li>
+                            <strong class="halo-green">Segregation</strong>
+                            <br><span style="font-size:1.2rem">Physical breakup of the graph into disconnected components.</span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="viz-center reveal delay-2">
+                    <div class="img-frame img-halo-teal" style="width: 150%;">
+                        <img src="figure_3.png" alt="Figure 3: Coevolution">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">08 // RESULTS</div>
+            <div class="layout-center">
+                <h2 class="reveal">Role of $\epsilon$</h2>
+                <div class="viz-center reveal delay-2">
+                    <div class="img-frame img-halo-purple">
+                        <img src="figure_4.png" alt="Figure 4: Phase Transition">
+                    </div>
+                </div>
+
+                <div class="glass-box box-glow-teal reveal delay-3" style="width: 80%; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; text-align: center; margin-top: 1rem;">
+                    <div>
+                        <span style="color: var(--vir-1); font-weight: 700; font-family: var(--font-code); display:block; font-size: 1.2rem; margin-bottom:0.5rem;">$\epsilon < 0.3$</span>
+                        <span>Fragmentation (Intolerance)</span>
+                    </div>
+                    <div style="border-left: 1px solid rgba(255,255,255,0.1); border-right: 1px solid rgba(255,255,255,0.1);">
+                        <span style="color: var(--vir-3); font-weight: 700; font-family: var(--font-code); display:block; font-size: 1.2rem; margin-bottom:0.5rem;">$\epsilon \approx 0.4$</span>
+                        <span class="halo-teal">Echo Chambers</span>
+                    </div>
+                    <div>
+                        <span style="color: var(--vir-5); font-weight: 700; font-family: var(--font-code); display:block; font-size: 1.2rem; margin-bottom:0.5rem;">$\epsilon > 0.6$</span>
+                        <span>Consensus </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">09 // RESULTS</div>
+            <div class="layout-center">
+                <h2 class="reveal">The Synergy between Social Influence and Rewiring</h2>
+                <div class="viz-center reveal delay-1" style="margin: 2rem 0;">
+                    <div class="img-frame img-halo-yellow" style="width: 120%;">
+                        <img src="figure_5.png" alt="Figure 5: Influence vs Rewiring">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">10 // RESULTS</div>
+            <div class="layout-split">
+                <div class="reveal">
+                    <h2>Convergence Speed</h2>
+                    <p>Analysis of the time $T_{crit}$ needed to reach the stationary state (complete segregation).</p>
+                    <div class="glass-box box-glow-green" style="margin-top: 2rem;">
+                        <h3 class="halo-green">Non-Linearity</h3>
+                        <p style="margin:0; font-size: 1.2rem;">
+                            A minimal amount of rewiring ($q > 0.1$) and influence <br>($\mu > 0.1$) is enough to drastically cut the formation time of Echo Chambers.
+                        </p>
+                    </div>
+                </div>
+                <div class="viz-center reveal delay-2">
+                    <div class="img-frame img-halo-green">
+                        <img src="figure_6.png" alt="Figure 6: Convergence Heatmap">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">11 // RESULTS</div>
+            <div class="layout-center">
+                <div class="viz-center reveal delay-2" style="margin: 2rem 0; width: 80%;">
+                    <div class="img-frame img-halo-teal">
+                        <img src="figure_7.png" alt="Figure 7: Topology">
+                    </div>
+                </div>
+
+                <div class="grid-2 reveal delay-3" style="text-align: left;">
+                    <div class="glass-box box-glow-yellow">
+                        <h3 class="halo-yellow">Closed Social Triads</h3>
+                        <p style="font-size: 1.2rem;">The Repost and Recommendation strategies generate significantly more triads than the Random strategy.</p>
+                    </div>
+                    <div class="glass-box box-glow-green">
+                        <h3 class="halo-green">Emergence of Hubs</h3>
+                        <p style="font-size: 1.2rem;">The Repost mechanism produces heavy tails (Power Laws) in the in-degree distribution. <strong>Rich-get-Richer</strong> effect.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">12 // RESULTS</div>
+            <div class="layout-center">
+                <h2 class="reveal delay-1">Empirical Validation</h2>
+                <p class="reveal delay-2">Validation on the <strong>US Politics Retweet Network (Conover et al., 2010)</strong>.</p>
+                
+                <div class="grid-3 reveal delay-3" style="text-align: left; gap: 2rem;">
+                    <div class="glass-box box-glow-teal">
+                        <h3>1. Opinion inference</h3>
+                        <p style="font-size: 1.2rem;">Opinions are inferred from hashtag vectors $\vec{h}_i$. The distance is the usage overlap:</p>
+                        <div style="font-size: 1.2rem; font-family: var(--font-code); color: var(--vir-3); margin-top: 0.5rem;">
+                            $$ d(i, j) = 1 - \frac{\vec{h}_i \cdot \vec{h}_j}{\min(||\vec{h}_i||, ||\vec{h}_j||)} $$
+                        </div>
+                    </div>
+                    
+                    <div class="glass-box box-glow-yellow">
+                        <h3>2. Segregation Index</h3>
+                        <p style="font-size: 1.2rem;">Measures the degree of segregation:</p>
+                        <div style="font-size: 1.2rem; font-family: var(--font-code); color: var(--vir-5); margin-top: 0.5rem;">
+                            $$ s = 1 - \frac{|E_b|}{2d |C_+| |C_-|} $$
+                        </div>
+                    </div>
+
+                    <div class="glass-box box-glow-green">
+                        <h3>3. Synthetic Retweet Network</h3>
+                        <p style="font-size: 1.2rem;">
+                            The model is calibrated and evolved until it reaches the same index $s$ as the real data. A <em>Synthetic Retweet Network</em> is then built for comparison.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">13 // SIGNATURE</div>
+            <div class="layout-split">
+                <div class="reveal">
+                    <h2>Bimodality</h2>
+                    <p>The analysis of pairwise distances ($d_o = |o_i - o_j|$) reveals the deep nature of polarization: the system expels moderate opinions and collapses into two stable states.</p>
+                    
+                    <div style="margin-top: 2.5rem; padding: 1.2rem; border-left: 3px solid var(--vir-4); background: linear-gradient(90deg, rgba(112, 224, 0, 0.05), transparent); border-radius: 0 10px 10px 0;">
+                        <strong style="color: var(--vir-4); font-size: 0.8rem; font-family: var(--font-code); display: block; margin-bottom: 0.5rem; letter-spacing: 1px;">EMPIRICAL VALIDATION</strong>
+                        <p style="margin: 0; font-size: 1.2rem; font-style: italic; color: #ddd;">
+                            The comparison with Twitter data confirms the qualitative validity: real data show the same non-trivial bimodal structure.
+                        </p>
+                    </div>
+                </div>
+                <div class="viz-center reveal delay-2">
+                    <div class="img-frame img-halo-teal">
+                        <img src="paper_fig_9.png" alt="Figure 9: Bimodal Distribution">
+                    </div>
+                    
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">14 // RESULTS</div>
+            <div class="layout-split">
+                <div class="viz-center reveal">
+                    <div class="img-frame img-halo-purple">
+                        <img src="figure_10.png" alt="Figure 10: KDE Evolution">
+                    </div>
+                </div>
+                <div class="reveal delay-2">
+                    <h2>The Bimodal Signature</h2>
+                    <p>
+                        The plot shows the dramatic phase transition from a mixed state (Green) to a perfectly segregated state (Purple).
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+    <div class="slide-kicker reveal">15 // IMPLICATIONS</div>
+    <div class="layout-center" style="width: 100%; max-width: 1400px;">
+        
+        <h2 class="reveal">Conclusions</h2>
+        
+        <div class="grid-3 reveal delay-2" style="gap: 1.5rem; margin-top: 3rem; align-items: stretch;">
+            
+            <div class="glass-box box-glow-teal" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="font-family: var(--font-code); color: var(--vir-3); font-size: 3rem; opacity: 0.5; margin-bottom: 0.5rem;">01.</div>
+                    <h3 class="halo-teal" style="font-size: 1.2rem;">Dynamical Sufficiency</h3>
+                    <p style="font-size: 1.2rem; margin-top: 1rem;">
+                        No complex cognitive biases or "fake news" are needed. The simple combination of <em>Social Influence</em> and <em>Unfollowing</em> is a sufficient condition to fragment society.
+                    </p>
+                </div>
+            </div>
+
+            <div class="glass-box box-glow-purple" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="font-family: var(--font-code); color: var(--vir-1); font-size: 3rem; opacity: 0.5; margin-bottom: 0.5rem;">02.</div>
+                    <h3 class="halo-purple" style="font-size: 1.2rem;">Critical Collapse</h3>
+                    <p style="font-size: 1rem; margin-top: 1.2rem;">
+                        The system does not degrade linearly. The interplay between opinions and structure acts as a catalyst, accelerating the formation of Echo Chambers.
+                    </p>
+                </div>
+            </div>
+
+            <div class="glass-box box-glow-yellow" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div style="font-family: var(--font-code); color: var(--vir-5); font-size: 3rem; opacity: 0.5; margin-bottom: 0.5rem;">03.</div>
+                    <h3 class="halo-yellow" style="font-size: 1.2rem;">The Algorithmic Paradox</h3>
+                    <p style="font-size: 1rem; margin-top: 1.2rem;">
+                        Recommender systems based on <em>Triadic Closure</em> ("friends of friends") increase local clustering, hermetically sealing information bubbles from within.
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
+        
+    </div>
+</section>
+
+        <section class="slide">
+            <div class="slide-kicker reveal">16 // Sources</div>
+            <div class="layout-center">
+                <div class="reveal" style="margin-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2rem;">
+                </div>
+                <div class="reveal delay-1 glass-box" style="text-align: left; max-width: 800px; padding: 2rem;">
+                    <h3 style="color: var(--vir-4); margin-bottom: 1rem;">Main Reference</h3>
+                    <p style="font-size: 1rem; color: #fff; font-family: var(--font-head); margin-bottom: 0.5rem;">
+                        Social influence and unfollowing accelerate the emergence of echo chambers
+                    </p>
+                    <p style="font-size: 0.9rem; margin-bottom: 0;">
+                        Sasahara, K., Chen, W., Peng, H., Ciampaglia, G. L., Flammini, A., & Menczer, F. (2021). 
+                        <em>Journal of Computational Social Science</em>, 4, 381-402.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        // --- 1. SLIDER LOGIC ---
+        const slider = document.getElementById('slider');
+        const slides = document.querySelectorAll('.slide');
+        const counter = document.getElementById('currSlide');
+        const totalSpan = document.getElementById('totalSlides');
+        const dotsContainer = document.getElementById('dotsContainer');
+        let current = 0;
+        const total = slides.length;
+
+        // Set Total
+        totalSpan.innerText = total.toString().padStart(2, '0');
+
+        // Init Dots
+        slides.forEach((_, index) => {
+            const dot = document.createElement('div');
+            dot.classList.add('dot');
+            if (index === 0) dot.classList.add('active');
+            dot.addEventListener('click', () => {
+                current = index;
+                updateSlider();
+            });
+            dotsContainer.appendChild(dot);
+        });
+        const dots = document.querySelectorAll('.dot');
+
+        function updateSlider() {
+            slider.style.transform = `translateY(-${current * 100}vh)`;
+            slides.forEach((s, i) => s.classList.toggle('active', i === current));
+            
+            // Update UI
+            counter.innerText = (current + 1).toString().padStart(2, '0');
+            
+            dots.forEach((d, i) => {
+                d.classList.toggle('active', i === current);
+            });
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (['ArrowDown', 'ArrowRight', ' ', 'PageDown'].includes(e.key) && current < total - 1) current++;
+            else if (['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key) && current > 0) current--;
+            updateSlider();
+        });
+
+        let isScrolling = false;
+        window.addEventListener('wheel', (e) => {
+            if (isScrolling) return;
+            isScrolling = true;
+            if (e.deltaY > 0 && current < total - 1) current++;
+            else if (e.deltaY < 0 && current > 0) current--;
+            updateSlider();
+            setTimeout(() => isScrolling = false, 800);
+        });
+
+        // --- 2. DYNAMIC NETWORK BACKGROUND (PARTICLES) ---
+        const canvas = document.getElementById('network-canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let particles = [];
+        const COLORS = ['#9b5de5', '#3b528b', '#00f5d4', '#70e000', '#fee440']; 
+        const PARTICLE_COUNT = 140;
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 0.3; 
+                this.vy = (Math.random() - 0.5) * 0.3;
+                this.size = Math.random() * 2 + 1;
+                this.color = COLORS[Math.floor(Math.random() * COLORS.length)];
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = 0.6;
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            particles = [];
+            for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            for (let i = 0; i < particles.length; i++) {
+                const p1 = particles[i];
+                p1.update();
+                p1.draw();
+                for (let j = i; j < particles.length; j++) {
+                    const p2 = particles[j];
+                    const dx = p1.x - p2.x;
+                    const dy = p1.y - p2.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        const alpha = (1 - dist / 120) * 0.15;
+                        ctx.strokeStyle = p1.color;
+                        ctx.globalAlpha = alpha;
+                        ctx.lineWidth = 0.8;
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', initParticles);
+        initParticles();
+        animate();
+        updateSlider();
+
+    </script>
+</body>
+</html>
