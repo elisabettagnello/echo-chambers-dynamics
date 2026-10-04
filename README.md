@@ -21,12 +21,12 @@ A run ends when the network has split into internally converged, disconnected co
 
 ## What is reproduced
 
-How do information diversity, opinions and network co-evolve in a single run? | `fig3` 
-How does tolerance ε control fragmentation vs consensus? (20 runs per ε) | `fig4` 
-Is influence alone, or rewiring alone, enough to create echo chambers? | `fig5` 
-How fast do echo chambers form across the (μ, q) plane? | `fig6` 
-How do follow strategies shape local clustering and the follower distribution? | `fig7a` , `fig7b` , `fig7` 
-What does polarization look like in the opinion density of a large network? | `fig10` 
+- How do information diversity, opinions and network co-evolve in a single run? | `fig3`
+- How does tolerance ε control fragmentation vs consensus? (20 runs per ε) | `fig4`
+- Is influence alone, or rewiring alone, enough to create echo chambers? | `fig5`
+- How fast do echo chambers form across the (μ, q) plane? | `fig6`
+- How do follow strategies shape local clustering and the follower distribution? | `fig7a` , `fig7b` , `fig7`
+- What does polarization look like in the opinion density of a large network? | `fig10` 
 
 The empirical validation on the US-politics retweet network shown in the presentation uses the
 paper's own figure and was not re-run here.
