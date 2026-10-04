@@ -31,6 +31,9 @@ A run ends when the network has split into internally converged, disconnected co
 The empirical validation on the US-politics retweet network shown in the presentation uses the
 paper's own figure and was not re-run here.
 
+## Materials
+- [Slides](https://elisabettagnello.github.io/echo-chambers-dynamics/presentation/index.html)
+
 ## Running it
 
 ```bash
